@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Orbit Binance Agent OS API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: orbit
+    description: Orbit trading copilot operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,137 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [orbit]
+      summary: Get the Orbit dashboard overview
+      responses:
+        "200":
+          description: Dashboard overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /market/snapshot:
+    get:
+      operationId: getMarketSnapshot
+      tags: [orbit]
+      summary: Get a market snapshot
+      parameters:
+        - name: symbol
+          in: query
+          required: false
+          schema:
+            type: string
+            default: BTCUSDT
+      responses:
+        "200":
+          description: Market snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketSnapshot"
+  /portfolio:
+    get:
+      operationId: getPortfolio
+      tags: [orbit]
+      summary: Get current portfolio exposure
+      responses:
+        "200":
+          description: Portfolio exposure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioSummary"
+  /activity:
+    get:
+      operationId: listActivity
+      tags: [orbit]
+      summary: List recent agent activity
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 1
+            maximum: 50
+            default: 8
+      responses:
+        "200":
+          description: Activity entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEntry"
+  /policy:
+    get:
+      operationId: getPolicy
+      tags: [orbit]
+      summary: Get the active execution policy
+      responses:
+        "200":
+          description: Execution policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionPolicy"
+    patch:
+      operationId: updatePolicy
+      tags: [orbit]
+      summary: Update the active execution policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutionPolicyInput"
+      responses:
+        "200":
+          description: Updated policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionPolicy"
+  /agent/analyze:
+    post:
+      operationId: analyzeMarket
+      tags: [orbit]
+      summary: Analyze a market request and produce a bounded action plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentAnalyzeInput"
+      responses:
+        "200":
+          description: Agent analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRun"
+  /agent/execute:
+    post:
+      operationId: executeAgentAction
+      tags: [orbit]
+      summary: Confirm and execute a bounded agent action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteActionInput"
+      responses:
+        "200":
+          description: Execution result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionResult"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +166,314 @@ components:
           type: string
       required:
         - status
+    DashboardSummary:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [demo, live]
+        liveStatus:
+          type: string
+          enum: [connected, demo]
+        balance:
+          type: number
+        dayPnl:
+          type: number
+        dayPnlPercent:
+          type: number
+        riskScore:
+          type: number
+        riskLabel:
+          type: string
+        activePositions:
+          type: number
+        protectedCapital:
+          type: number
+        policyStatus:
+          type: string
+        lastSyncedAt:
+          type: string
+        topSymbol:
+          type: string
+        topSymbolChange:
+          type: number
+      required:
+        - mode
+        - liveStatus
+        - balance
+        - dayPnl
+        - dayPnlPercent
+        - riskScore
+        - riskLabel
+        - activePositions
+        - protectedCapital
+        - policyStatus
+        - lastSyncedAt
+        - topSymbol
+        - topSymbolChange
+    MarketSnapshot:
+      type: object
+      properties:
+        symbol:
+          type: string
+        price:
+          type: number
+        change24h:
+          type: number
+        volatility:
+          type: number
+        trend:
+          type: string
+          enum: [bullish, neutral, bearish]
+        signal:
+          type: string
+        confidence:
+          type: number
+        support:
+          type: number
+        resistance:
+          type: number
+        volume24h:
+          type: number
+        candles:
+          type: array
+          items:
+            type: number
+      required:
+        - symbol
+        - price
+        - change24h
+        - volatility
+        - trend
+        - signal
+        - confidence
+        - support
+        - resistance
+        - volume24h
+        - candles
+    PortfolioSummary:
+      type: object
+      properties:
+        totalValue:
+          type: number
+        availableCash:
+          type: number
+        unrealizedPnl:
+          type: number
+        leverage:
+          type: number
+        concentration:
+          type: number
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortfolioAsset"
+      required:
+        - totalValue
+        - availableCash
+        - unrealizedPnl
+        - leverage
+        - concentration
+        - assets
+    PortfolioAsset:
+      type: object
+      properties:
+        asset:
+          type: string
+        value:
+          type: number
+        allocation:
+          type: number
+        change:
+          type: number
+        tone:
+          type: string
+          enum: [gold, blue, green, purple]
+      required:
+        - asset
+        - value
+        - allocation
+        - change
+        - tone
+    ActivityEntry:
+      type: object
+      properties:
+        id:
+          type: number
+        kind:
+          type: string
+          enum: [analysis, policy, execution, sync, blocked]
+        title:
+          type: string
+        detail:
+          type: string
+        time:
+          type: string
+        status:
+          type: string
+          enum: [completed, awaiting, blocked]
+        symbol:
+          type: ["string", "null"]
+      required:
+        - id
+        - kind
+        - title
+        - detail
+        - time
+        - status
+        - symbol
+    ExecutionPolicy:
+      type: object
+      properties:
+        maxTradeSize:
+          type: number
+        maxLeverage:
+          type: number
+        dailyLossLimit:
+          type: number
+        requireConfirmation:
+          type: boolean
+        allowedSymbols:
+          type: array
+          items:
+            type: string
+        withdrawalsBlocked:
+          type: boolean
+      required:
+        - maxTradeSize
+        - maxLeverage
+        - dailyLossLimit
+        - requireConfirmation
+        - allowedSymbols
+        - withdrawalsBlocked
+    ExecutionPolicyInput:
+      type: object
+      properties:
+        maxTradeSize:
+          type: number
+          minimum: 1
+        maxLeverage:
+          type: number
+          minimum: 1
+        dailyLossLimit:
+          type: number
+          minimum: 1
+        requireConfirmation:
+          type: boolean
+        allowedSymbols:
+          type: array
+          items:
+            type: string
+      required:
+        - maxTradeSize
+        - maxLeverage
+        - dailyLossLimit
+        - requireConfirmation
+        - allowedSymbols
+    AgentAnalyzeInput:
+      type: object
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+        symbol:
+          type: string
+          default: BTCUSDT
+        intent:
+          type: string
+          enum: [observe, simulate, prepare]
+          default: prepare
+      required:
+        - prompt
+        - symbol
+        - intent
+    AgentRun:
+      type: object
+      properties:
+        id:
+          type: number
+        symbol:
+          type: string
+        headline:
+          type: string
+        thesis:
+          type: string
+        action:
+          type: string
+          enum: [buy, sell, hold]
+        side:
+          type: string
+          enum: [LONG, SHORT, FLAT]
+        notional:
+          type: number
+        entry:
+          type: number
+        stop:
+          type: number
+        target:
+          type: number
+        confidence:
+          type: number
+        riskScore:
+          type: number
+        checks:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [ready, blocked, executed]
+        createdAt:
+          type: string
+      required:
+        - id
+        - symbol
+        - headline
+        - thesis
+        - action
+        - side
+        - notional
+        - entry
+        - stop
+        - target
+        - confidence
+        - riskScore
+        - checks
+        - status
+        - createdAt
+    ExecuteActionInput:
+      type: object
+      properties:
+        runId:
+          type: number
+        confirmation:
+          type: boolean
+      required:
+        - runId
+        - confirmation
+    ExecutionResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        orderId:
+          type: string
+        filledPrice:
+          type: number
+        notional:
+          type: number
+        riskAfter:
+          type: number
+        activity:
+          $ref: "#/components/schemas/ActivityEntry"
+      required:
+        - success
+        - message
+        - orderId
+        - filledPrice
+        - notional
+        - riskAfter
+        - activity
 

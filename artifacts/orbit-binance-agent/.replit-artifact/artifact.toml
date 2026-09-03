@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Orbit — Binance Agent OS"
+description = "A safety-first AI trading copilot that explains market context, enforces user-defined risk boundaries, and prepares confirmed Binance Spot and Futures actions with a verifiable audit trail."
+version = "1.0.0"
+id = "artifacts/orbit-binance-agent"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24541
+
+[services.development]
+run = "pnpm --filter @workspace/orbit-binance-agent run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/orbit-binance-agent", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/orbit-binance-agent/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24541"
+BASE_PATH = "/"
