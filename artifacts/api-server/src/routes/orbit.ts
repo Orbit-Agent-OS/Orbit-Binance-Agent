@@ -63,6 +63,92 @@ function numberValue(value: string | number | null | undefined) {
   return Number(value ?? 0);
 }
 
+type GeminiNarrative = {
+  headline?: string;
+  thesis?: string;
+};
+
+async function generateGeminiNarrative(input: {
+  prompt: string;
+  market: ReturnType<typeof marketFor>;
+  policy: Awaited<ReturnType<typeof getActivePolicy>>;
+  action: string;
+}) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [
+            {
+              text: "You are Orbit, a conservative crypto market copilot. Explain setups clearly, never promise returns, never invent account data, and never recommend bypassing a user's risk policy. Return only valid JSON with exactly two string fields: headline and thesis.",
+            },
+          ],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: JSON.stringify({
+                  request: input.prompt.slice(0, 600),
+                  market: {
+                    symbol: input.market.symbol,
+                    price: input.market.price,
+                    change24h: input.market.change24h,
+                    signal: input.market.signal,
+                    trend: input.market.trend,
+                    confidence: input.market.confidence,
+                    support: input.market.support,
+                    resistance: input.market.resistance,
+                    volatility: input.market.volatility,
+                  },
+                  proposedAction: input.action,
+                  activePolicy: {
+                    maxTradeSize: input.policy.maxTradeSize,
+                    maxLeverage: input.policy.maxLeverage,
+                    dailyLossLimit: input.policy.dailyLossLimit,
+                    requireConfirmation: input.policy.requireConfirmation,
+                    allowedSymbols: input.policy.allowedSymbols,
+                  },
+                }),
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: "application/json",
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Gemini request failed with ${response.status}`);
+  }
+
+  const payload = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  if (!text) return null;
+
+  const parsed = JSON.parse(text) as GeminiNarrative;
+  if (typeof parsed.headline !== "string" || typeof parsed.thesis !== "string") {
+    return null;
+  }
+  return {
+    headline: parsed.headline.slice(0, 180),
+    thesis: parsed.thesis.slice(0, 900),
+  };
+}
+
 function relativeTime(date: Date) {
   const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
   if (seconds < 60) return "just now";
@@ -290,12 +376,20 @@ router.post("/agent/analyze", async (req, res) => {
     const status = policy.allowedSymbols.includes(market.symbol) && notional <= numberValue(policy.maxTradeSize) ? "ready" : "blocked";
     const stop = action === "sell" ? market.price * 1.018 : market.price * 0.982;
     const target = action === "sell" ? market.price * 0.961 : market.price * 1.039;
+    let narrative: GeminiNarrative | null = null;
+    try {
+      narrative = await generateGeminiNarrative({ prompt: body.prompt, market, policy, action });
+    } catch (error) {
+      req.log.warn({ err: error }, "Gemini unavailable; using deterministic analysis narrative");
+    }
+    const headline = narrative?.headline ?? (action === "hold" ? `${market.symbol} is in observation mode` : `${market.symbol} setup passes the first safety gates`);
+    const thesis = narrative?.thesis ?? `${market.signal} with ${market.change24h.toFixed(2)}% 24h movement. Orbit sees a ${market.trend} structure, but sizing stays bounded and the action remains yours to confirm.`;
     const [run] = await db
       .insert(orbitAgentRuns)
       .values({
         symbol: market.symbol,
-        headline: action === "hold" ? `${market.symbol} is in observation mode` : `${market.symbol} setup passes the first safety gates`,
-        thesis: `${market.signal} with ${market.change24h.toFixed(2)}% 24h movement. Orbit sees a ${market.trend} structure, but sizing stays bounded and the action remains yours to confirm.`,
+        headline,
+        thesis,
         action,
         side,
         notional: String(notional),
